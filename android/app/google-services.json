@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "950737889471",
+    "project_id": "finalexam-dd08a",
+    "storage_bucket": "finalexam-dd08a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:950737889471:android:d270297041de9c0dc07e0a",
+        "android_client_info": {
+          "package_name": "com.productmanagement"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRL4rZwc4NyYrBPe-YBVS4oDn7jlcol2E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,130 +1,351 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, {useState, useEffect} from 'react';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
   View,
+  Text,
+  TextInput,
+  Button,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  Alert,
 } from 'react-native';
+import firestore from '@react-native-firebase/firestore';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  imageUrl: string;
 }
+const App = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [category, setCategory] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const productsCollection = firestore().collection('products');
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  useEffect(() => {
+    const subscriber = productsCollection.orderBy('name', 'asc').onSnapshot(
+      querySnapshot => {
+        const productList: Product[] = [];
+        querySnapshot.forEach(doc => {
+          productList.push({
+            id: doc.id,
+            ...doc.data(),
+          } as Product);
+        });
+        setProducts(productList);
+        setError(null);
+      },
+      err => {
+        setError(err.message);
+      },
+    );
+
+    return () => subscriber();
+  }, []);
+
+  const resetForm = () => {
+    setName('');
+    setPrice('');
+    setCategory('');
+    setImageUrl('');
+    setEditingId(null);
   };
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the reccomendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+  const handleCreate = async () => {
+    if (!name.trim() || !price.trim() || !category.trim()) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    const priceNumber = parseFloat(price);
+    if (isNaN(priceNumber) || priceNumber <= 0) {
+      setError('Price must be a valid positive number');
+      return;
+    }
+
+    try {
+      await productsCollection.add({
+        name: name.trim(),
+        price: priceNumber,
+        category: category.trim(),
+        imageUrl: imageUrl.trim(),
+      });
+      resetForm();
+      setError(null);
+    } catch (e: any) {
+      setError('Failed to add product: ' + e.message);
+    }
+  };
+
+  const handleEdit = (product: Product) => {
+    setName(product.name);
+    setPrice(product.price.toString());
+    setCategory(product.category);
+    setImageUrl(product.imageUrl || '');
+    setEditingId(product.id);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingId) {
+      setError('No product selected for editing');
+      return;
+    }
+
+    if (!name.trim() || !price.trim() || !category.trim()) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    const priceNumber = parseFloat(price);
+    if (isNaN(priceNumber) || priceNumber <= 0) {
+      setError('Price must be a valid positive number');
+      return;
+    }
+
+    try {
+      await productsCollection.doc(editingId).update({
+        name: name.trim(),
+        price: priceNumber,
+        category: category.trim(),
+        imageUrl: imageUrl.trim(),
+      });
+      resetForm();
+      setError(null);
+    } catch (e: any) {
+      setError('Failed to update product: ' + e.message);
+    }
+  };
+
+  const handleDelete = (id: string, productName: string) => {
+    Alert.alert(
+      'Delete Product',
+      `Are you sure you want to delete "${productName}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await productsCollection.doc(id).delete();
+              setError(null);
+            } catch (e: any) {
+              setError('Failed to delete product: ' + e.message);
+            }
+          },
+        },
+      ],
+      {cancelable: true},
+    );
+  };
 
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
+    <ScrollView style={styles.scrollContainer}>
+      <View style={styles.container}>
+        <Text style={styles.header}>Product Management</Text>
+
+        <View style={styles.formContainer}>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Product Name"
+          />
+          <TextInput
+            style={styles.input}
+            value={price}
+            onChangeText={setPrice}
+            placeholder="Price"
+            keyboardType="decimal-pad"
+          />
+          <TextInput
+            style={styles.input}
+            value={category}
+            onChangeText={setCategory}
+            placeholder="Category"
+          />
+          <TextInput
+            style={styles.input}
+            value={imageUrl}
+            onChangeText={setImageUrl}
+            placeholder="Image URL"
+          />
+
+          {editingId ? (
+            <View style={styles.buttonGroup}>
+              <Button title="Update Product" onPress={handleUpdate} />
+              <Button title="Cancel" onPress={resetForm} color="gray" />
+            </View>
+          ) : (
+            <Button title="Add Product" onPress={handleCreate} />
+          )}
         </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
+
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        <Text style={styles.subHeader}>Products List</Text>
+        <FlatList
+          data={products}
+          keyExtractor={item => item.id}
+          renderItem={({item}) => (
+            <View style={styles.productItem}>
+              <View style={styles.productInfo}>
+                {item.imageUrl ? (
+                  <Image
+                    source={{uri: item.imageUrl}}
+                    style={styles.productImage}
+                  />
+                ) : (
+                  <View style={styles.placeholderImage}>
+                    <Text>No Image</Text>
+                  </View>
+                )}
+                <View style={styles.productDetails}>
+                  <Text style={styles.productName}>{item.name}</Text>
+                  <Text style={styles.productPrice}>
+                    ${item.price.toFixed(2)}
+                  </Text>
+                  <Text style={styles.productCategory}>{item.category}</Text>
+                </View>
+              </View>
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.editButton]}
+                  onPress={() => handleEdit(item)}>
+                  <Text style={styles.buttonText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={() => handleDelete(item.id, item.name)}>
+                  <Text style={styles.buttonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  sectionTitle: {
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  sectionDescription: {
-    marginTop: 8,
+  subHeader: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    margin: 20,
+  },
+  formContainer: {
+    paddingLeft: 15,
+    paddingRight: 15,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 5,
+    backgroundColor: '#fff',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  productItem: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 10,
+    marginBottom: 10,
+    backgroundColor: '#fff',
+  },
+  productInfo: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  productImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 5,
+    marginRight: 10,
+    backgroundColor: '#eee',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  productDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  productName: {
     fontSize: 18,
-    fontWeight: '400',
+    fontWeight: 'bold',
+    marginBottom: 5,
   },
-  highlight: {
-    fontWeight: '700',
+  productPrice: {
+    fontSize: 16,
+    color: '#008000',
+    marginBottom: 5,
+  },
+  productCategory: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    marginLeft: 10,
+  },
+  editButton: {
+    backgroundColor: '#4682B4',
+  },
+  deleteButton: {
+    backgroundColor: '#DC143C',
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  error: {
+    color: 'red',
+    marginBottom: 10,
+    textAlign: 'center',
   },
 });
 
